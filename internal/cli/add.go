@@ -13,19 +13,19 @@ var addCmd = &cobra.Command{
 	Long: `Agrega nuevos componentes a tu proyecto siguiendo Clean Architecture.
 
 Componentes disponibles:
-  • usecase  - Crea un nuevo caso de uso en internal/usecase
-  • adapter  - Crea un nuevo adaptador en internal/repository
-  • model    - Crea un nuevo modelo en internal/domain
-  • handler  - Crea un nuevo handler HTTP en internal/http`,
+  • usecase  - Crea un nuevo caso de uso en domain/usecases
+  • adapter  - Crea un nuevo adaptador en infrastructure/adapters/database
+  • model    - Crea un nuevo modelo en domain/models
+  • handler  - Crea un nuevo handler HTTP en infrastructure/entrypoints/http`,
 }
 
 var addUsecaseCmd = &cobra.Command{
 	Use:   "usecase [nombre]",
 	Short: "Crea un nuevo caso de uso",
-	Long: `Crea un nuevo caso de uso en internal/usecase/.
+	Long: `Crea un nuevo caso de uso en domain/usecases/.
 
 El caso de uso seguirá el patrón de Clean Architecture con:
-  • Interface del caso de uso
+  • Interface del caso de uso (puerto)
   • Implementación concreta
   • Struct de entrada (Input)
   • Struct de salida (Output)
@@ -43,7 +43,7 @@ Ejemplo:
 		}
 
 		fmt.Printf("✅ Caso de uso '%s' creado exitosamente!\n", name)
-		fmt.Printf("   Archivo: internal/usecase/%s.go\n", generator.ToSnakeCase(name))
+		fmt.Printf("   Archivo: domain/usecases/%s.go\n", generator.ToSnakeCase(name))
 		return nil
 	},
 }
@@ -51,7 +51,7 @@ Ejemplo:
 var addAdapterCmd = &cobra.Command{
 	Use:   "adapter [nombre]",
 	Short: "Crea un nuevo adaptador/repositorio",
-	Long: `Crea un nuevo adaptador en internal/repository/.
+	Long: `Crea un nuevo adaptador en infrastructure/adapters/database/.
 
 El adaptador seguirá el patrón Repository con:
   • Interface del repositorio
@@ -71,7 +71,7 @@ Ejemplo:
 		}
 
 		fmt.Printf("✅ Adaptador '%s' creado exitosamente!\n", name)
-		fmt.Printf("   Archivo: internal/repository/%s.go\n", generator.ToSnakeCase(name))
+		fmt.Printf("   Archivo: infrastructure/adapters/database/%s.go\n", generator.ToSnakeCase(name))
 		return nil
 	},
 }
@@ -79,9 +79,10 @@ Ejemplo:
 var addModelCmd = &cobra.Command{
 	Use:   "model [nombre]",
 	Short: "Crea un nuevo modelo de dominio",
-	Long: `Crea un nuevo modelo en internal/domain/.
+	Long: `Crea un nuevo modelo en domain/models/.
 
 El modelo será una estructura básica que representa una entidad de dominio.
+Entidades de dominio son objetos puros de negocio sin dependencias externas.
 
 Ejemplo:
   cleango add model User
@@ -96,7 +97,7 @@ Ejemplo:
 		}
 
 		fmt.Printf("✅ Modelo '%s' creado exitosamente!\n", name)
-		fmt.Printf("   Archivo: internal/domain/%s.go\n", generator.ToSnakeCase(name))
+		fmt.Printf("   Archivo: domain/models/%s.go\n", generator.ToSnakeCase(name))
 		return nil
 	},
 }
@@ -104,7 +105,7 @@ Ejemplo:
 var addHandlerCmd = &cobra.Command{
 	Use:   "handler [nombre]",
 	Short: "Crea un nuevo handler HTTP",
-	Long: `Crea un nuevo handler HTTP en internal/http/.
+	Long: `Crea un nuevo handler HTTP en infrastructure/entrypoints/http/.
 
 El handler incluirá:
   • Estructura del handler
@@ -125,7 +126,7 @@ Ejemplo:
 		}
 
 		fmt.Printf("✅ Handler '%s' creado exitosamente!\n", name)
-		fmt.Printf("   Archivo: internal/http/%s_handler.go\n", generator.ToSnakeCase(name))
+		fmt.Printf("   Archivo: infrastructure/entrypoints/http/%s_handler.go\n", generator.ToSnakeCase(name))
 		return nil
 	},
 }

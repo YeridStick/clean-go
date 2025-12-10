@@ -11,16 +11,15 @@ import (
 
 // GenerateProject generates a new Go project with Clean Architecture
 func GenerateProject(targetDir string, config ProjectConfig) error {
-	// Create directory structure
+	// Create directory structure following Clean Architecture
 	dirs := []string{
 		"cmd/api",
-		"internal/config",
-		"internal/logger",
-		"internal/http",
-		"internal/domain",
-		"internal/usecase",
-		"internal/repository",
-		"internal/db",
+		"config",
+		"domain/models",
+		"domain/usecases",
+		"infrastructure/adapters/database",
+		"infrastructure/adapters/logger",
+		"infrastructure/entrypoints/http",
 		"migrations",
 	}
 
@@ -50,15 +49,22 @@ func GenerateProject(targetDir string, config ProjectConfig) error {
 	}
 
 	// Generate config
-	configPath := filepath.Join("internal/config/config.go")
+	configPath := filepath.Join("config/config.go")
 	if err := WriteFile(configPath, []byte(configTemplate)); err != nil {
 		return fmt.Errorf("error creating config: %w", err)
 	}
 
 	// Generate logger
-	loggerPath := filepath.Join("internal/logger/logger.go")
+	loggerPath := filepath.Join("infrastructure/adapters/logger/logger.go")
 	if err := WriteFile(loggerPath, []byte(loggerTemplate)); err != nil {
 		return fmt.Errorf("error creating logger: %w", err)
+	}
+
+	// Generate README with structure explanation
+	readmePath := filepath.Join("README.md")
+	readmeContent := generateReadme(config)
+	if err := WriteFile(readmePath, []byte(readmeContent)); err != nil {
+		return fmt.Errorf("error creating README.md: %w", err)
 	}
 
 	// Generate main.go based on framework
@@ -122,4 +128,76 @@ func generateMainFile(config ProjectConfig) ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
+}
+
+// generateReadme generates a README with the project structure
+func generateReadme(config ProjectConfig) string {
+	readme := "# " + config.Name + "\n\n"
+	readme += "Proyecto Go con Clean Architecture\n\n"
+	readme += "## Estructura del Proyecto\n\n"
+	readme += "Este proyecto sigue los principios de Clean Architecture:\n\n"
+	readme += "```\n"
+	readme += config.Name + "/\n"
+	readme += "├── cmd/api/                          # Punto de entrada de la aplicación\n"
+	readme += "│   └── main.go\n"
+	readme += "├── config/                           # Configuraciones\n"
+	readme += "│   └── config.go\n"
+	readme += "├── domain/                           # Capa de Dominio (Reglas de Negocio)\n"
+	readme += "│   ├── models/                       # Entidades de dominio\n"
+	readme += "│   └── usecases/                     # Casos de uso (puertos)\n"
+	readme += "├── infrastructure/                   # Capa de Infraestructura\n"
+	readme += "│   ├── adapters/                     # Adaptadores (implementaciones)\n"
+	readme += "│   │   ├── database/                 # Repositorios de base de datos\n"
+	readme += "│   │   └── logger/                   # Sistema de logging\n"
+	readme += "│   └── entrypoints/                  # Puntos de entrada\n"
+	readme += "│       └── http/                     # Handlers HTTP\n"
+	readme += "├── migrations/                       # Migraciones de base de datos\n"
+	readme += "├── .gitignore\n"
+	readme += "├── go.mod\n"
+	readme += "└── README.md\n"
+	readme += "```\n\n"
+	readme += "## Capas de Clean Architecture\n\n"
+	readme += "### Domain (Dominio)\n"
+	readme += "- **models/**: Entidades de dominio, objetos de negocio puros sin dependencias externas\n"
+	readme += "- **usecases/**: Lógica de negocio, casos de uso de la aplicación (interfaces/puertos)\n\n"
+	readme += "### Infrastructure (Infraestructura)\n"
+	readme += "- **adapters/**: Implementaciones concretas de los puertos definidos en domain\n"
+	readme += "  - **database/**: Repositorios que acceden a la base de datos\n"
+	readme += "  - **logger/**: Sistema de logging\n"
+	readme += "- **entrypoints/**: Puntos de entrada a la aplicación\n"
+	readme += "  - **http/**: Handlers HTTP, controladores REST\n\n"
+	readme += "## Configuración\n\n"
+	readme += fmt.Sprintf("- **Framework**: %s\n", config.Framework)
+	readme += fmt.Sprintf("- **Base de datos**: %s\n", config.Database)
+	readme += fmt.Sprintf("- **Redis**: %v\n", config.UseRedis)
+	readme += fmt.Sprintf("- **Kafka**: %v\n\n", config.UseKafka)
+	readme += "## Ejecutar la aplicación\n\n"
+	readme += "```bash\n"
+	readme += "go run ./cmd/api\n"
+	readme += "```\n\n"
+	readme += "## Agregar componentes\n\n"
+	readme += "```bash\n"
+	readme += "# Agregar un nuevo modelo de dominio\n"
+	readme += "cleango add model User\n\n"
+	readme += "# Agregar un nuevo caso de uso\n"
+	readme += "cleango add usecase CreateUser\n\n"
+	readme += "# Agregar un nuevo adaptador/repositorio\n"
+	readme += "cleango add adapter UserRepository\n\n"
+	readme += "# Agregar un nuevo handler HTTP\n"
+	readme += "cleango add handler User\n"
+	readme += "```\n\n"
+	readme += "## Principios de Clean Architecture\n\n"
+	readme += "1. **Independencia de frameworks**: El dominio no depende de frameworks\n"
+	readme += "2. **Testeable**: La lógica de negocio puede testearse sin UI, BD, etc.\n"
+	readme += "3. **Independencia de la UI**: La UI puede cambiar sin afectar el dominio\n"
+	readme += "4. **Independencia de la BD**: Puedes cambiar de BD sin afectar el negocio\n"
+	readme += "5. **Independencia de agentes externos**: El dominio no conoce nada del mundo exterior\n\n"
+	readme += "## Flujo de dependencias\n\n"
+	readme += "```\n"
+	readme += "entrypoints -> usecases -> models\n"
+	readme += "              ↑\n"
+	readme += "           adapters\n"
+	readme += "```\n\n"
+	readme += "Las dependencias siempre apuntan hacia adentro (hacia el dominio).\n"
+	return readme
 }

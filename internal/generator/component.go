@@ -15,9 +15,9 @@ func GenerateUsecase(name string) error {
 	}
 
 	// Ensure usecase directory exists
-	usecaseDir := "internal/usecase"
+	usecaseDir := "domain/usecases"
 	if err := EnsureDir(usecaseDir); err != nil {
-		return fmt.Errorf("error creando directorio usecase: %w", err)
+		return fmt.Errorf("error creando directorio usecases: %w", err)
 	}
 
 	// Prepare template data
@@ -53,9 +53,9 @@ func GenerateAdapter(name string) error {
 		return fmt.Errorf("no se encontró go.mod. Asegúrate de estar en la raíz del proyecto")
 	}
 
-	repoDir := "internal/repository"
+	repoDir := "infrastructure/adapters/database"
 	if err := EnsureDir(repoDir); err != nil {
-		return fmt.Errorf("error creando directorio repository: %w", err)
+		return fmt.Errorf("error creando directorio database: %w", err)
 	}
 
 	data := map[string]string{
@@ -87,9 +87,9 @@ func GenerateModel(name string) error {
 		return fmt.Errorf("no se encontró go.mod. Asegúrate de estar en la raíz del proyecto")
 	}
 
-	domainDir := "internal/domain"
+	domainDir := "domain/models"
 	if err := EnsureDir(domainDir); err != nil {
-		return fmt.Errorf("error creando directorio domain: %w", err)
+		return fmt.Errorf("error creando directorio models: %w", err)
 	}
 
 	data := map[string]string{
@@ -120,7 +120,7 @@ func GenerateHandler(name string) error {
 		return fmt.Errorf("no se encontró go.mod. Asegúrate de estar en la raíz del proyecto")
 	}
 
-	httpDir := "internal/http"
+	httpDir := "infrastructure/entrypoints/http"
 	if err := EnsureDir(httpDir); err != nil {
 		return fmt.Errorf("error creando directorio http: %w", err)
 	}
