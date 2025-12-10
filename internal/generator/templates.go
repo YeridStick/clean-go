@@ -131,8 +131,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"{{.ModulePath}}/internal/config"
-	"{{.ModulePath}}/internal/logger"
+	"{{.ModulePath}}/config"
+	"{{.ModulePath}}/infrastructure/adapters/logger"
 )
 
 func main() {
@@ -161,8 +161,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"{{.ModulePath}}/internal/config"
-	"{{.ModulePath}}/internal/logger"
+	"{{.ModulePath}}/config"
+	"{{.ModulePath}}/infrastructure/adapters/logger"
 )
 
 func main() {
@@ -188,8 +188,8 @@ func main() {
 const mainGinTemplate = `package main
 
 import (
-	"{{.ModulePath}}/internal/config"
-	"{{.ModulePath}}/internal/logger"
+	"{{.ModulePath}}/config"
+	"{{.ModulePath}}/infrastructure/adapters/logger"
 
 	"github.com/gin-gonic/gin"
 )
@@ -217,8 +217,8 @@ func main() {
 const mainFiberTemplate = `package main
 
 import (
-	"{{.ModulePath}}/internal/config"
-	"{{.ModulePath}}/internal/logger"
+	"{{.ModulePath}}/config"
+	"{{.ModulePath}}/infrastructure/adapters/logger"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -243,7 +243,7 @@ func main() {
 `
 
 // usecaseTemplate is the template for use cases
-const usecaseTemplate = `package usecase
+const usecaseTemplate = `package usecases
 
 import (
 	"context"
@@ -282,7 +282,7 @@ func (uc *{{.LowerName}}UseCase) Execute(ctx context.Context, input {{.Name}}Inp
 `
 
 // adapterTemplate is the template for adapters/repositories
-const adapterTemplate = `package repository
+const adapterTemplate = `package database
 
 import (
 	"context"
@@ -333,7 +333,7 @@ func (r *{{.LowerName}}) Delete(ctx context.Context, id string) error {
 `
 
 // modelTemplate is the template for domain models
-const modelTemplate = `package domain
+const modelTemplate = `package models
 
 import "time"
 
