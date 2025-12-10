@@ -31,7 +31,7 @@ go version
 
 ## 🔧 Instalación
 
-### Opción 1: Instalación directa con `go install`
+### Opción 1: Instalación directa con `go install` (Recomendada)
 
 ```bash
 go install github.com/YeridStick/cleango/cmd/cleango@latest
@@ -58,6 +58,22 @@ cd cleango
 go mod download
 
 # Instalar el CLI
+go install ./cmd/cleango
+```
+
+### 🔄 Actualizar a la última versión
+
+Si ya tienes `cleango` instalado y quieres actualizar a la última versión:
+
+```bash
+go install github.com/YeridStick/cleango/cmd/cleango@latest
+```
+
+O desde el código fuente:
+
+```bash
+cd cleango
+git pull origin master
 go install ./cmd/cleango
 ```
 
@@ -118,8 +134,8 @@ cd my-service
 cleango add usecase GetUser
 ```
 
-Esto genera: `internal/usecase/get_user.go` con:
-- Interface del caso de uso
+Esto genera: `domain/usecases/get_user.go` con:
+- Interface del caso de uso (puerto)
 - Implementación concreta
 - Structs de Input/Output
 
@@ -129,7 +145,7 @@ Esto genera: `internal/usecase/get_user.go` con:
 cleango add adapter UserRepository
 ```
 
-Genera: `internal/repository/user_repository.go` con:
+Genera: `infrastructure/adapters/database/user_repository.go` con:
 - Interface del repositorio
 - Implementación con métodos CRUD
 - Métodos: FindByID, Save, Update, Delete
@@ -140,7 +156,7 @@ Genera: `internal/repository/user_repository.go` con:
 cleango add model User
 ```
 
-Genera: `internal/domain/user.go` con:
+Genera: `domain/models/user.go` con:
 - Estructura del modelo
 - Campos base (ID, CreatedAt, UpdatedAt)
 - Métodos de validación
@@ -151,7 +167,7 @@ Genera: `internal/domain/user.go` con:
 cleango add handler User
 ```
 
-Genera: `internal/http/user_handler.go` con:
+Genera: `infrastructure/entrypoints/http/user_handler.go` con:
 - Estructura del handler
 - Métodos HTTP (Get, Post, Put, Delete)
 - Manejo básico de requests/responses
@@ -162,35 +178,49 @@ Genera: `internal/http/user_handler.go` con:
 
 ```
 my-service/
-├── cmd/
-│   └── api/
-│       └── main.go              # Punto de entrada de la aplicación
-├── internal/
-│   ├── config/
-│   │   └── config.go            # Configuración centralizada
-│   ├── logger/
-│   │   └── logger.go            # Logger estructurado (zap)
-│   ├── http/
-│   │   └── *_handler.go         # Handlers HTTP
-│   ├── domain/
-│   │   └── *.go                 # Modelos de dominio
-│   ├── usecase/
-│   │   └── *.go                 # Casos de uso (lógica de negocio)
-│   ├── repository/
-│   │   └── *.go                 # Adaptadores/Repositorios
-│   └── db/
-│       └── ...                  # Conexiones a DB
-├── migrations/                  # Migraciones de base de datos
+├── cmd/api/
+│   └── main.go                      # Punto de entrada de la aplicación
+├── config/
+│   └── config.go                    # Configuración centralizada
+├── domain/                          # Capa de Dominio (Reglas de Negocio)
+│   ├── models/                      # Entidades de dominio
+│   │   └── *.go                     # Objetos de negocio puros
+│   └── usecases/                    # Casos de uso (puertos)
+│       └── *.go                     # Lógica de negocio
+├── infrastructure/                  # Capa de Infraestructura
+│   ├── adapters/                    # Adaptadores (implementaciones)
+│   │   ├── database/                # Repositorios de base de datos
+│   │   │   └── *.go
+│   │   └── logger/                  # Sistema de logging
+│   │       └── logger.go
+│   └── entrypoints/                 # Puntos de entrada
+│       └── http/                    # Handlers HTTP
+│           └── *_handler.go
+├── migrations/                      # Migraciones de base de datos
 ├── go.mod
 ├── go.sum
-└── .gitignore
+├── .gitignore
+└── README.md                        # Documentación del proyecto
 ```
 
 Esta estructura sigue los principios de **Clean Architecture**:
-- 🎯 **Domain**: Entidades de negocio (independientes)
-- 💼 **Usecase**: Lógica de negocio (independiente de frameworks)
-- 🔌 **Adapters**: Conexión con el mundo externo (DB, HTTP, etc.)
-- 🌐 **HTTP**: Capa de presentación
+- 🎯 **Domain**: Entidades de negocio y casos de uso (puertos) - **independientes de frameworks**
+  - `models/`: Objetos de dominio puros sin dependencias externas
+  - `usecases/`: Interfaces que definen la lógica de negocio
+- 🔌 **Infrastructure**: Adaptadores e implementaciones concretas
+  - `adapters/`: Implementaciones de los puertos definidos en domain
+  - `entrypoints/`: Puntos de entrada a la aplicación (HTTP, gRPC, etc.)
+- ⚙️ **Config**: Configuración centralizada en la raíz
+
+### Flujo de Dependencias
+
+```
+entrypoints (HTTP) → usecases (puertos) → models (entidades)
+                           ↑
+                      adapters (implementaciones)
+```
+
+**Las dependencias siempre apuntan hacia adentro (hacia el dominio).**
 
 ---
 
