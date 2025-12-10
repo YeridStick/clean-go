@@ -31,7 +31,32 @@ go version
 
 ## 🔧 Instalación
 
-### Opción 1: Instalación directa con `go install`
+### Opción 1: Script de instalación automática (Recomendado) 🚀
+
+#### Linux/macOS
+```bash
+curl -fsSL https://raw.githubusercontent.com/YeridStick/cleango/main/scripts/install.sh | bash
+```
+
+O descarga y ejecuta manualmente:
+```bash
+wget https://raw.githubusercontent.com/YeridStick/cleango/main/scripts/install.sh
+chmod +x install.sh
+./install.sh
+```
+
+#### Windows (PowerShell)
+```powershell
+irm https://raw.githubusercontent.com/YeridStick/cleango/main/scripts/install.ps1 | iex
+```
+
+O descarga y ejecuta manualmente:
+```powershell
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/YeridStick/cleango/main/scripts/install.ps1" -OutFile "install.ps1"
+.\install.ps1
+```
+
+### Opción 2: Instalación directa con `go install`
 
 ```bash
 go install github.com/YeridStick/cleango/cmd/cleango@latest
@@ -47,7 +72,7 @@ export PATH=$PATH:$(go env GOPATH)/bin
 $env:Path += ";$(go env GOPATH)\bin"
 ```
 
-### Opción 2: Instalación desde el código fuente
+### Opción 3: Instalación desde el código fuente
 
 ```bash
 # Clonar el repositorio
@@ -66,6 +91,22 @@ go install ./cmd/cleango
 ```bash
 cleango --version
 ```
+
+### 🔄 Actualizar a la última versión
+
+Si ya tienes `cleango` instalado y quieres actualizar a la última versión:
+
+```bash
+# Opción 1: Reinstalar con go install (recomendado)
+go install github.com/YeridStick/cleango/cmd/cleango@latest
+
+# Opción 2: Desde el código fuente
+cd cleango
+git pull origin main
+go install ./cmd/cleango
+```
+
+**⚠️ IMPORTANTE:** Si creaste proyectos con versiones anteriores de `cleango`, es recomendable reinstalar para obtener la estructura correcta de Clean Architecture.
 
 ---
 
@@ -164,33 +205,44 @@ Genera: `internal/http/user_handler.go` con:
 my-service/
 ├── cmd/
 │   └── api/
-│       └── main.go              # Punto de entrada de la aplicación
-├── internal/
-│   ├── config/
-│   │   └── config.go            # Configuración centralizada
-│   ├── logger/
-│   │   └── logger.go            # Logger estructurado (zap)
-│   ├── http/
-│   │   └── *_handler.go         # Handlers HTTP
-│   ├── domain/
-│   │   └── *.go                 # Modelos de dominio
-│   ├── usecase/
-│   │   └── *.go                 # Casos de uso (lógica de negocio)
-│   ├── repository/
-│   │   └── *.go                 # Adaptadores/Repositorios
-│   └── db/
-│       └── ...                  # Conexiones a DB
-├── migrations/                  # Migraciones de base de datos
+│       └── main.go                          # Punto de entrada de la aplicación
+├── config/
+│   └── config.go                            # Configuración centralizada
+├── domain/                                  # 🎯 Capa de Dominio
+│   ├── models/                              # Entidades de negocio
+│   │   └── *.go                            # Modelos puros (User, Product, etc.)
+│   └── usecases/                           # Casos de uso (interfaces/puertos)
+│       └── *.go                            # Lógica de negocio
+├── infrastructure/                          # 🔌 Capa de Infraestructura
+│   ├── adapters/                           # Implementaciones de adaptadores
+│   │   ├── database/                       # Repositorios de base de datos
+│   │   │   └── *.go                       # Implementación de repositorios
+│   │   └── logger/                         # Sistema de logging
+│   │       └── logger.go                  # Logger estructurado (zap)
+│   └── entrypoints/                        # Puntos de entrada a la aplicación
+│       └── http/                           # 🌐 Handlers HTTP
+│           └── *_handler.go               # Controllers/Handlers REST
+├── migrations/                              # Migraciones de base de datos
+├── .gitignore
 ├── go.mod
 ├── go.sum
-└── .gitignore
+└── README.md
 ```
 
 Esta estructura sigue los principios de **Clean Architecture**:
-- 🎯 **Domain**: Entidades de negocio (independientes)
-- 💼 **Usecase**: Lógica de negocio (independiente de frameworks)
-- 🔌 **Adapters**: Conexión con el mundo externo (DB, HTTP, etc.)
-- 🌐 **HTTP**: Capa de presentación
+- 🎯 **Domain (Dominio)**: Entidades y lógica de negocio (independiente de frameworks)
+  - `models/`: Entidades de negocio puras sin dependencias externas
+  - `usecases/`: Interfaces que definen la lógica de negocio (puertos)
+- 🔌 **Infrastructure (Infraestructura)**: Conexión con el mundo externo
+  - `adapters/`: Implementaciones concretas (repositorios, servicios externos)
+  - `entrypoints/`: Puntos de entrada (HTTP handlers, gRPC, CLI, etc.)
+- ⚙️ **Config**: Configuración centralizada de la aplicación
+
+### 📐 Principios aplicados:
+- ✅ **Regla de dependencia**: Las dependencias siempre apuntan hacia el dominio
+- ✅ **Independencia de frameworks**: El dominio no conoce Fiber, Gin, Chi, etc.
+- ✅ **Testeable**: Cada capa puede testearse independientemente
+- ✅ **Independencia de la BD**: Puedes cambiar de Postgres a MongoDB sin tocar el dominio
 
 ---
 
@@ -342,6 +394,89 @@ go build -o cleango ./cmd/cleango
 # Ejecutar tests (cuando estén implementados)
 go test ./...
 ```
+
+---
+
+## ❓ Troubleshooting / FAQ
+
+### El proyecto generado solo tiene carpetas `cmd/`, `internal/` y `migrations/`
+
+**Problema:** Estás usando una versión antigua del CLI que no genera la estructura correcta de Clean Architecture.
+
+**Solución:** Reinstala el CLI con la última versión:
+
+```bash
+# Linux/macOS
+go install github.com/YeridStick/cleango/cmd/cleango@latest
+
+# Windows (PowerShell)
+go install github.com/YeridStick/cleango/cmd/cleango@latest
+```
+
+Después de reinstalar, crea un nuevo proyecto y deberías ver esta estructura:
+- ✅ `config/`
+- ✅ `domain/models/`
+- ✅ `domain/usecases/`
+- ✅ `infrastructure/adapters/database/`
+- ✅ `infrastructure/adapters/logger/`
+- ✅ `infrastructure/entrypoints/http/`
+
+### El comando `cleango` no se encuentra
+
+**Problema:** El binario no está en tu PATH.
+
+**Solución:**
+
+```bash
+# Linux/macOS - Agregar a ~/.bashrc o ~/.zshrc
+export PATH=$PATH:$(go env GOPATH)/bin
+
+# Windows (PowerShell) - Ejecutar como administrador
+$env:Path += ";$(go env GOPATH)\bin"
+[Environment]::SetEnvironmentVariable("Path", $env:Path, "User")
+```
+
+Luego reinicia tu terminal.
+
+### Error al instalar dependencias
+
+**Problema:** `go get` falla al instalar algunas dependencias.
+
+**Solución:**
+
+```bash
+cd tu-proyecto
+go clean -modcache
+go mod download
+go mod tidy
+```
+
+### ¿Cómo verifico qué versión tengo instalada?
+
+```bash
+cleango --version
+```
+
+### ¿Cómo actualizo a la última versión?
+
+```bash
+# Simplemente reinstala
+go install github.com/YeridStick/cleango/cmd/cleango@latest
+```
+
+### Los prompts interactivos aparecen duplicados (Windows)
+
+**Problema:** En Windows, algunos prompts pueden aparecer duplicados debido a cómo PowerShell maneja la salida.
+
+**Solución temporal:** Usa el modo no interactivo:
+
+```bash
+cleango new my-project --framework fiber --database postgres --non-interactive
+```
+
+### ¿Puedo personalizar las plantillas generadas?
+
+**Próximamente:** Estamos trabajando en soporte para plantillas personalizadas. Por ahora, los archivos se generan con plantillas predefinidas que puedes modificar después de la generación.
 
 ---
 
