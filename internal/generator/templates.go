@@ -407,3 +407,239 @@ func (h *{{.Name}}Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 `
+
+// postgresTemplate is the template for PostgreSQL connection
+const postgresTemplate = `package database
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"time"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
+)
+
+// PostgresConfig holds PostgreSQL connection configuration
+type PostgresConfig struct {
+	URL             string
+	MaxOpenConns    int
+	MaxIdleConns    int
+	ConnMaxLifetime time.Duration
+}
+
+// NewPostgresConfig creates a new PostgreSQL configuration with defaults
+func NewPostgresConfig(url string) PostgresConfig {
+	return PostgresConfig{
+		URL:             url,
+		MaxOpenConns:    25,
+		MaxIdleConns:    5,
+		ConnMaxLifetime: 5 * time.Minute,
+	}
+}
+
+// PostgresDB wraps a *sql.DB connection
+type PostgresDB struct {
+	DB *sql.DB
+}
+
+// NewPostgresDB creates a new PostgreSQL database connection
+func NewPostgresDB(config PostgresConfig) (*PostgresDB, error) {
+	if config.URL == "" {
+		return nil, fmt.Errorf("database URL is required")
+	}
+
+	db, err := sql.Open("pgx", config.URL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+
+	// Configure connection pool
+	db.SetMaxOpenConns(config.MaxOpenConns)
+	db.SetMaxIdleConns(config.MaxIdleConns)
+	db.SetConnMaxLifetime(config.ConnMaxLifetime)
+
+	// Verify connection
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := db.PingContext(ctx); err != nil {
+		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	return &PostgresDB{DB: db}, nil
+}
+
+// Close closes the database connection
+func (p *PostgresDB) Close() error {
+	if p.DB != nil {
+		return p.DB.Close()
+	}
+	return nil
+}
+
+// Ping verifies the connection is alive
+func (p *PostgresDB) Ping(ctx context.Context) error {
+	return p.DB.PingContext(ctx)
+}
+
+// Stats returns database statistics
+func (p *PostgresDB) Stats() sql.DBStats {
+	return p.DB.Stats()
+}
+`
+
+// postgresTestTemplate is the template for PostgreSQL connection tests
+const postgresTestTemplate = `package database
+
+import (
+	"context"
+	"testing"
+	"time"
+)
+
+func TestNewPostgresConfig(t *testing.T) {
+	url := "postgres://user:pass@localhost:5432/testdb"
+	config := NewPostgresConfig(url)
+
+	if config.URL != url {
+		t.Errorf("expected URL %s, got %s", url, config.URL)
+	}
+
+	if config.MaxOpenConns != 25 {
+		t.Errorf("expected MaxOpenConns 25, got %d", config.MaxOpenConns)
+	}
+
+	if config.MaxIdleConns != 5 {
+		t.Errorf("expected MaxIdleConns 5, got %d", config.MaxIdleConns)
+	}
+
+	if config.ConnMaxLifetime != 5*time.Minute {
+		t.Errorf("expected ConnMaxLifetime 5m, got %v", config.ConnMaxLifetime)
+	}
+}
+
+func TestNewPostgresDB_EmptyURL(t *testing.T) {
+	config := PostgresConfig{URL: ""}
+	_, err := NewPostgresDB(config)
+
+	if err == nil {
+		t.Error("expected error with empty URL, got nil")
+	}
+}
+
+func TestNewPostgresDB_InvalidURL(t *testing.T) {
+	config := NewPostgresConfig("invalid-url")
+	_, err := NewPostgresDB(config)
+
+	if err == nil {
+		t.Error("expected error with invalid URL, got nil")
+	}
+}
+
+// TestPostgresDB_Integration requires a running PostgreSQL instance
+// To run: docker run --rm -d -p 5432:5432 -e POSTGRES_PASSWORD=test postgres:15
+func TestPostgresDB_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	config := NewPostgresConfig("postgres://postgres:test@localhost:5432/postgres?sslmode=disable")
+	db, err := NewPostgresDB(config)
+	if err != nil {
+		t.Skipf("skipping integration test: %v", err)
+		return
+	}
+	defer db.Close()
+
+	t.Run("Ping", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		if err := db.Ping(ctx); err != nil {
+			t.Errorf("failed to ping database: %v", err)
+		}
+	})
+
+	t.Run("Stats", func(t *testing.T) {
+		stats := db.Stats()
+		if stats.MaxOpenConnections != 25 {
+			t.Errorf("expected MaxOpenConnections 25, got %d", stats.MaxOpenConnections)
+		}
+	})
+
+	t.Run("Close", func(t *testing.T) {
+		if err := db.Close(); err != nil {
+			t.Errorf("failed to close database: %v", err)
+		}
+	})
+}
+`
+
+// envExampleTemplate is the template for .env.example file
+const envExampleTemplate = `# Application Configuration
+APP_ENV=dev
+APP_PORT=8080
+
+# Database Configuration
+DB_POSTGRES_URL=postgres://postgres:password@localhost:5432/mydb?sslmode=disable
+DB_MYSQL_DSN=user:password@tcp(localhost:3306)/mydb
+DB_MONGO_URI=mongodb://localhost:27017
+DB_ORACLE_DSN=user/password@localhost:1521/ORCL
+
+# Redis Configuration (optional)
+REDIS_ADDR=localhost:6379
+
+# Kafka Configuration (optional)
+KAFKA_BROKERS=localhost:9092
+`
+
+// makefileTemplate is the template for Makefile
+const makefileTemplate = `{{if eq .Database "postgres"}}.PHONY: help dev test test-short test-integration db-up db-down db-migrate
+
+help: ## Show this help
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
+
+dev: ## Run the application in development mode
+	go run ./cmd/api
+
+test: ## Run all tests
+	go test -v -race -coverprofile=coverage.out ./...
+
+test-short: ## Run short tests only (no integration)
+	go test -v -short -race ./...
+
+test-integration: ## Run integration tests only
+	go test -v -run Integration ./...
+
+coverage: test ## Generate coverage report
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated: coverage.html"
+
+db-up: ## Start PostgreSQL database with Docker
+	docker run --rm -d \
+		--name {{.Name}}-postgres \
+		-p 5432:5432 \
+		-e POSTGRES_PASSWORD=postgres \
+		-e POSTGRES_DB={{.Name}} \
+		postgres:15-alpine
+
+db-down: ## Stop PostgreSQL database
+	docker stop {{.Name}}-postgres || true
+
+db-migrate: ## Run database migrations (placeholder)
+	@echo "TODO: Implement migrations"
+
+build: ## Build the application
+	go build -o bin/api ./cmd/api
+
+clean: ## Clean build artifacts
+	rm -rf bin/ coverage.out coverage.html
+
+deps: ## Install dependencies
+	go mod download
+	go mod tidy
+
+lint: ## Run linter
+	golangci-lint run ./...
+{{end}}`
