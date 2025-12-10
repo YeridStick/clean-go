@@ -78,6 +78,27 @@ func GenerateProject(targetDir string, config ProjectConfig) error {
 		return fmt.Errorf("error creating main.go: %w", err)
 	}
 
+	// Generate database-specific files
+	if err := generateDatabaseFiles(config); err != nil {
+		return fmt.Errorf("error generating database files: %w", err)
+	}
+
+	// Generate .env.example
+	if err := WriteFile(".env.example", []byte(envExampleTemplate)); err != nil {
+		return fmt.Errorf("error creating .env.example: %w", err)
+	}
+
+	// Generate Makefile if PostgreSQL
+	if config.Database == "postgres" {
+		makefileContent, err := generateMakefile(config)
+		if err != nil {
+			return fmt.Errorf("error generating Makefile: %w", err)
+		}
+		if err := WriteFile("Makefile", makefileContent); err != nil {
+			return fmt.Errorf("error creating Makefile: %w", err)
+		}
+	}
+
 	// Install dependencies
 	fmt.Println("📦 Instalando dependencias...")
 	for _, dep := range config.GetDependencies() {
@@ -130,6 +151,41 @@ func generateMainFile(config ProjectConfig) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// generateDatabaseFiles generates database-specific files based on configuration
+func generateDatabaseFiles(config ProjectConfig) error {
+	switch config.Database {
+	case "postgres":
+		// Generate PostgreSQL connection file
+		dbPath := filepath.Join("infrastructure/adapters/database/postgres.go")
+		if err := WriteFile(dbPath, []byte(postgresTemplate)); err != nil {
+			return fmt.Errorf("error creating postgres.go: %w", err)
+		}
+
+		// Generate PostgreSQL test file
+		testPath := filepath.Join("infrastructure/adapters/database/postgres_test.go")
+		if err := WriteFile(testPath, []byte(postgresTestTemplate)); err != nil {
+			return fmt.Errorf("error creating postgres_test.go: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// generateMakefile generates a Makefile based on configuration
+func generateMakefile(config ProjectConfig) ([]byte, error) {
+	tmpl, err := template.New("makefile").Parse(makefileTemplate)
+	if err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, config); err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
 // generateReadme generates a README with the project structure
 func generateReadme(config ProjectConfig) string {
 	readme := "# " + config.Name + "\n\n"
@@ -152,8 +208,12 @@ func generateReadme(config ProjectConfig) string {
 	readme += "│   └── entrypoints/                  # Puntos de entrada\n"
 	readme += "│       └── http/                     # Handlers HTTP\n"
 	readme += "├── migrations/                       # Migraciones de base de datos\n"
+	readme += "├── .env.example                      # Variables de entorno ejemplo\n"
 	readme += "├── .gitignore\n"
 	readme += "├── go.mod\n"
+	if config.Database == "postgres" {
+		readme += "├── Makefile                          # Comandos útiles\n"
+	}
 	readme += "└── README.md\n"
 	readme += "```\n\n"
 	readme += "## Capas de Clean Architecture\n\n"
@@ -171,10 +231,42 @@ func generateReadme(config ProjectConfig) string {
 	readme += fmt.Sprintf("- **Base de datos**: %s\n", config.Database)
 	readme += fmt.Sprintf("- **Redis**: %v\n", config.UseRedis)
 	readme += fmt.Sprintf("- **Kafka**: %v\n\n", config.UseKafka)
-	readme += "## Ejecutar la aplicación\n\n"
-	readme += "```bash\n"
-	readme += "go run ./cmd/api\n"
-	readme += "```\n\n"
+
+	// Add database-specific quick start
+	if config.Database == "postgres" {
+		readme += "## Inicio Rápido con PostgreSQL\n\n"
+		readme += "### 1. Configurar variables de entorno\n\n"
+		readme += "Copia el archivo `.env.example` a `.env` y configura tu URL de PostgreSQL:\n\n"
+		readme += "```bash\n"
+		readme += "cp .env.example .env\n"
+		readme += "# Edita .env con tus credenciales\n"
+		readme += "```\n\n"
+		readme += "### 2. Iniciar base de datos (opcional con Docker)\n\n"
+		readme += "```bash\n"
+		readme += "make db-up\n"
+		readme += "```\n\n"
+		readme += "### 3. Ejecutar tests\n\n"
+		readme += "```bash\n"
+		readme += "# Solo tests unitarios (sin base de datos)\n"
+		readme += "make test-short\n\n"
+		readme += "# Tests de integración (requiere base de datos)\n"
+		readme += "make test-integration\n\n"
+		readme += "# Todos los tests\n"
+		readme += "make test\n"
+		readme += "```\n\n"
+		readme += "### 4. Ejecutar la aplicación\n\n"
+		readme += "```bash\n"
+		readme += "make dev\n"
+		readme += "# o\n"
+		readme += "go run ./cmd/api\n"
+		readme += "```\n\n"
+	} else {
+		readme += "## Ejecutar la aplicación\n\n"
+		readme += "```bash\n"
+		readme += "go run ./cmd/api\n"
+		readme += "```\n\n"
+	}
+
 	readme += "## Agregar componentes\n\n"
 	readme += "```bash\n"
 	readme += "# Agregar un nuevo modelo de dominio\n"
