@@ -1,0 +1,37 @@
+# Binaries
+cleango
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go build outputs
+bin/
+build/
+dist/
+
+# Coverage
+coverage.out
+*.coverprofile
+
+# Go modules vendored
+vendor/
+
+# Logs
+*.log
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.iml
+
+# Temporary files
+*.swp
+*~
