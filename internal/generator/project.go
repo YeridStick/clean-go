@@ -84,7 +84,11 @@ func GenerateProject(targetDir string, config ProjectConfig) error {
 	}
 
 	// Generate .env.example
-	if err := WriteFile(".env.example", []byte(envExampleTemplate)); err != nil {
+	envContent, err := renderEnvExample(config)
+	if err != nil {
+		return fmt.Errorf("error creating .env.example: %w", err)
+	}
+	if err := WriteFile(".env.example", envContent); err != nil {
 		return fmt.Errorf("error creating .env.example: %w", err)
 	}
 
@@ -153,18 +157,31 @@ func generateMainFile(config ProjectConfig) ([]byte, error) {
 
 // generateDatabaseFiles generates database-specific files based on configuration
 func generateDatabaseFiles(config ProjectConfig) error {
-	switch config.Database {
-	case "postgres":
-		// Generate PostgreSQL connection file
-		dbPath := filepath.Join("infrastructure/adapters/database/postgres.go")
-		if err := WriteFile(dbPath, []byte(postgresTemplate)); err != nil {
-			return fmt.Errorf("error creating postgres.go: %w", err)
-		}
+	templates := map[string]struct {
+		filename string
+		content  string
+		test     string
+	}{
+		"postgres": {"postgres", postgresTemplate, postgresTestTemplate},
+		"mysql":    {"mysql", mysqlTemplate, mysqlTestTemplate},
+		"mongodb":  {"mongodb", mongoTemplate, mongoTestTemplate},
+		"oracle":   {"oracle", oracleTemplate, oracleTestTemplate},
+	}
 
-		// Generate PostgreSQL test file
-		testPath := filepath.Join("infrastructure/adapters/database/postgres_test.go")
-		if err := WriteFile(testPath, []byte(postgresTestTemplate)); err != nil {
-			return fmt.Errorf("error creating postgres_test.go: %w", err)
+	tmpl, ok := templates[config.Database]
+	if !ok {
+		return nil
+	}
+
+	dbPath := filepath.Join("infrastructure/adapters/database", tmpl.filename+".go")
+	if err := WriteFile(dbPath, []byte(tmpl.content)); err != nil {
+		return fmt.Errorf("error creating %s: %w", dbPath, err)
+	}
+
+	if tmpl.test != "" {
+		testPath := filepath.Join("infrastructure/adapters/database", tmpl.filename+"_test.go")
+		if err := WriteFile(testPath, []byte(tmpl.test)); err != nil {
+			return fmt.Errorf("error creating %s: %w", testPath, err)
 		}
 	}
 
@@ -292,4 +309,18 @@ func generateReadme(config ProjectConfig) string {
 	readme += "```\n\n"
 	readme += "Las dependencias siempre apuntan hacia adentro (hacia el dominio).\n"
 	return readme
+}
+
+func renderEnvExample(config ProjectConfig) ([]byte, error) {
+	tmpl, err := template.New("env").Parse(envExampleTemplate)
+	if err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, config); err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }

@@ -48,7 +48,7 @@ func GenerateUsecase(name string) error {
 }
 
 // GenerateAdapter generates a new adapter/repository
-func GenerateAdapter(name string) error {
+func GenerateAdapter(name string, withTests bool) error {
 	if !FileExists("go.mod") {
 		return fmt.Errorf("no se encontró go.mod. Asegúrate de estar en la raíz del proyecto")
 	}
@@ -78,7 +78,32 @@ func GenerateAdapter(name string) error {
 		return fmt.Errorf("el archivo %s ya existe", filename)
 	}
 
-	return WriteFile(filename, buf.Bytes())
+	if err := WriteFile(filename, buf.Bytes()); err != nil {
+		return err
+	}
+
+	if withTests {
+		testTmpl, err := template.New("adapter_test").Parse(adapterTestTemplate)
+		if err != nil {
+			return err
+		}
+
+		var testBuf bytes.Buffer
+		if err := testTmpl.Execute(&testBuf, data); err != nil {
+			return err
+		}
+
+		testFile := filepath.Join(repoDir, ToSnakeCase(name)+"_test.go")
+		if FileExists(testFile) {
+			return fmt.Errorf("el archivo %s ya existe", testFile)
+		}
+
+		if err := WriteFile(testFile, testBuf.Bytes()); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // GenerateModel generates a new domain model

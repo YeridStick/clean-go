@@ -51,6 +51,7 @@ type Config struct {
 	PostgresURL string
 	MySQLDSN    string
 	MongoURI    string
+	MongoDatabase string
 	OracleDSN   string
 
 	RedisAddr    string
@@ -64,6 +65,7 @@ func Load() Config {
 		PostgresURL:  getEnv("DB_POSTGRES_URL", ""),
 		MySQLDSN:     getEnv("DB_MYSQL_DSN", ""),
 		MongoURI:     getEnv("DB_MONGO_URI", ""),
+		MongoDatabase: getEnv("DB_MONGO_DATABASE", "app"),
 		OracleDSN:    getEnv("DB_ORACLE_DSN", ""),
 		RedisAddr:    getEnv("REDIS_ADDR", "localhost:6379"),
 		KafkaBrokers: getEnv("KAFKA_BROKERS", "localhost:9092"),
@@ -332,6 +334,19 @@ func (r *{{.LowerName}}) Delete(ctx context.Context, id string) error {
 }
 `
 
+// adapterTestTemplate is a basic test for adapters
+const adapterTestTemplate = `package database
+
+import "testing"
+
+func TestNew{{.Name}}(t *testing.T) {
+	adapter := New{{.Name}}()
+	if adapter == nil {
+		t.Fatal("expected adapter instance, got nil")
+	}
+}
+`
+
 // modelTemplate is the template for domain models
 const modelTemplate = `package models
 
@@ -415,6 +430,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -436,6 +452,11 @@ func NewPostgresConfig(url string) PostgresConfig {
 		MaxIdleConns:    5,
 		ConnMaxLifetime: 5 * time.Minute,
 	}
+}
+
+// NewPostgresConfigFromEnv builds the config using environment variables
+func NewPostgresConfigFromEnv() PostgresConfig {
+	return NewPostgresConfig(os.Getenv("DB_POSTGRES_URL"))
 }
 
 // PostgresDB wraps a *sql.DB connection
@@ -519,6 +540,16 @@ func TestNewPostgresConfig(t *testing.T) {
 	}
 }
 
+func TestNewPostgresConfigFromEnv(t *testing.T) {
+	expected := "postgres://env-user:env-pass@localhost:5432/envdb"
+	t.Setenv("DB_POSTGRES_URL", expected)
+
+	config := NewPostgresConfigFromEnv()
+	if config.URL != expected {
+		t.Errorf("expected URL %s from env, got %s", expected, config.URL)
+	}
+}
+
 func TestNewPostgresDB_EmptyURL(t *testing.T) {
 	config := PostgresConfig{URL: ""}
 	_, err := NewPostgresDB(config)
@@ -576,22 +607,511 @@ func TestPostgresDB_Integration(t *testing.T) {
 }
 `
 
+// mysqlTemplate is the template for MySQL connection
+const mysqlTemplate = `package database
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"os"
+	"time"
+
+	_ "github.com/go-sql-driver/mysql"
+)
+
+type MySQLConfig struct {
+	DSN             string
+	MaxOpenConns    int
+	MaxIdleConns    int
+	ConnMaxLifetime time.Duration
+	ConnectTimeout  time.Duration
+}
+
+func NewMySQLConfig(dsn string) MySQLConfig {
+	return MySQLConfig{
+		DSN:             dsn,
+		MaxOpenConns:    25,
+		MaxIdleConns:    5,
+		ConnMaxLifetime: 5 * time.Minute,
+		ConnectTimeout:  5 * time.Second,
+	}
+}
+
+func NewMySQLConfigFromEnv() MySQLConfig {
+	return NewMySQLConfig(os.Getenv("DB_MYSQL_DSN"))
+}
+
+type MySQLDB struct {
+	DB *sql.DB
+}
+
+func NewMySQLDB(config MySQLConfig) (*MySQLDB, error) {
+	if config.DSN == "" {
+		return nil, fmt.Errorf("DSN is required")
+	}
+
+	db, err := sql.Open("mysql", config.DSN)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+
+	db.SetMaxOpenConns(config.MaxOpenConns)
+	db.SetMaxIdleConns(config.MaxIdleConns)
+	db.SetConnMaxLifetime(config.ConnMaxLifetime)
+
+	ctx, cancel := context.WithTimeout(context.Background(), config.ConnectTimeout)
+	defer cancel()
+
+	if err := db.PingContext(ctx); err != nil {
+		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	return &MySQLDB{DB: db}, nil
+}
+
+func (m *MySQLDB) Close() error {
+	if m.DB != nil {
+		return m.DB.Close()
+	}
+	return nil
+}
+
+func (m *MySQLDB) Ping(ctx context.Context) error {
+	return m.DB.PingContext(ctx)
+}
+
+func (m *MySQLDB) Stats() sql.DBStats {
+	return m.DB.Stats()
+}
+`
+
+// mysqlTestTemplate is the template for MySQL connection tests
+const mysqlTestTemplate = `package database
+
+import (
+	"context"
+	"testing"
+	"time"
+)
+
+func TestNewMySQLConfig(t *testing.T) {
+	dsn := "user:pass@tcp(localhost:3306)/testdb"
+	config := NewMySQLConfig(dsn)
+
+	if config.DSN != dsn {
+		t.Errorf("expected DSN %s, got %s", dsn, config.DSN)
+	}
+	if config.MaxOpenConns != 25 {
+		t.Errorf("expected MaxOpenConns 25, got %d", config.MaxOpenConns)
+	}
+	if config.MaxIdleConns != 5 {
+		t.Errorf("expected MaxIdleConns 5, got %d", config.MaxIdleConns)
+	}
+	if config.ConnMaxLifetime != 5*time.Minute {
+		t.Errorf("expected ConnMaxLifetime 5m, got %v", config.ConnMaxLifetime)
+	}
+	if config.ConnectTimeout != 5*time.Second {
+		t.Errorf("expected ConnectTimeout 5s, got %v", config.ConnectTimeout)
+	}
+}
+
+func TestNewMySQLConfigFromEnv(t *testing.T) {
+	expected := "user:pass@tcp(localhost:3306)/envdb"
+	t.Setenv("DB_MYSQL_DSN", expected)
+
+	config := NewMySQLConfigFromEnv()
+	if config.DSN != expected {
+		t.Errorf("expected DSN %s from env, got %s", expected, config.DSN)
+	}
+}
+
+func TestNewMySQLDB_EmptyDSN(t *testing.T) {
+	config := MySQLConfig{DSN: ""}
+	if _, err := NewMySQLDB(config); err == nil {
+		t.Error("expected error with empty DSN, got nil")
+	}
+}
+
+func TestNewMySQLDB_InvalidDSN(t *testing.T) {
+	config := NewMySQLConfig("invalid-dsn")
+	if _, err := NewMySQLDB(config); err == nil {
+		t.Error("expected error with invalid DSN, got nil")
+	}
+}
+
+// TestMySQLDB_Integration requires a running MySQL instance
+// To run: docker run --rm -d -p 3306:3306 -e MYSQL_ROOT_PASSWORD=test mysql:8
+func TestMySQLDB_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	config := NewMySQLConfig("root:test@tcp(localhost:3306)/mysql?parseTime=true")
+	db, err := NewMySQLDB(config)
+	if err != nil {
+		t.Skipf("skipping integration test: %v", err)
+		return
+	}
+	defer db.Close()
+
+	t.Run("Ping", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := db.Ping(ctx); err != nil {
+			t.Errorf("failed to ping database: %v", err)
+		}
+	})
+
+	t.Run("Stats", func(t *testing.T) {
+		stats := db.Stats()
+		if stats.MaxOpenConnections != 25 {
+			t.Errorf("expected MaxOpenConnections 25, got %d", stats.MaxOpenConnections)
+		}
+	})
+}
+`
+
+// mongoTemplate is the template for MongoDB connection
+const mongoTemplate = `package database
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"time"
+
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+)
+
+type MongoConfig struct {
+	URI            string
+	Database       string
+	ConnectTimeout time.Duration
+}
+
+func NewMongoConfig(uri, database string) MongoConfig {
+	if database == "" {
+		database = "app"
+	}
+	return MongoConfig{
+		URI:            uri,
+		Database:       database,
+		ConnectTimeout: 5 * time.Second,
+	}
+}
+
+func NewMongoConfigFromEnv() MongoConfig {
+	return NewMongoConfig(
+		os.Getenv("DB_MONGO_URI"),
+		os.Getenv("DB_MONGO_DATABASE"),
+	)
+}
+
+type MongoClient struct {
+	Client *mongo.Client
+}
+
+func NewMongoClient(config MongoConfig) (*MongoClient, error) {
+	if config.URI == "" {
+		return nil, fmt.Errorf("mongodb URI is required")
+	}
+
+	opts := options.Client().ApplyURI(config.URI)
+
+	ctx, cancel := context.WithTimeout(context.Background(), config.ConnectTimeout)
+	defer cancel()
+	client, err := mongo.Connect(ctx, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to mongodb: %w", err)
+	}
+
+	if err := client.Ping(ctx, nil); err != nil {
+		return nil, fmt.Errorf("failed to ping mongodb: %w", err)
+	}
+
+	return &MongoClient{Client: client}, nil
+}
+
+func (m *MongoClient) Database(name string) *mongo.Database {
+	return m.Client.Database(name)
+}
+
+func (m *MongoClient) Ping(ctx context.Context) error {
+	return m.Client.Ping(ctx, nil)
+}
+
+func (m *MongoClient) Disconnect(ctx context.Context) error {
+	if m.Client != nil {
+		return m.Client.Disconnect(ctx)
+	}
+	return nil
+}
+`
+
+// mongoTestTemplate is the template for MongoDB connection tests
+const mongoTestTemplate = `package database
+
+import (
+	"context"
+	"testing"
+	"time"
+)
+
+func TestNewMongoConfig(t *testing.T) {
+	config := NewMongoConfig("mongodb://localhost:27017", "testdb")
+
+	if config.URI != "mongodb://localhost:27017" {
+		t.Errorf("expected URI mongodb://localhost:27017, got %s", config.URI)
+	}
+	if config.Database != "testdb" {
+		t.Errorf("expected database testdb, got %s", config.Database)
+	}
+	if config.ConnectTimeout != 5*time.Second {
+		t.Errorf("expected ConnectTimeout 5s, got %v", config.ConnectTimeout)
+	}
+}
+
+func TestNewMongoConfigFromEnv(t *testing.T) {
+	t.Setenv("DB_MONGO_URI", "mongodb://env:27017")
+	t.Setenv("DB_MONGO_DATABASE", "envdb")
+
+	config := NewMongoConfigFromEnv()
+	if config.URI != "mongodb://env:27017" {
+		t.Errorf("expected URI mongodb://env:27017, got %s", config.URI)
+	}
+	if config.Database != "envdb" {
+		t.Errorf("expected database envdb, got %s", config.Database)
+	}
+}
+
+func TestNewMongoClient_EmptyURI(t *testing.T) {
+	config := MongoConfig{URI: ""}
+	if _, err := NewMongoClient(config); err == nil {
+		t.Error("expected error with empty URI, got nil")
+	}
+}
+
+func TestNewMongoClient_InvalidURI(t *testing.T) {
+	config := NewMongoConfig("://invalid-uri", "db")
+	if _, err := NewMongoClient(config); err == nil {
+		t.Error("expected error with invalid URI, got nil")
+	}
+}
+
+// TestMongoClient_Integration requires a running MongoDB instance
+// To run: docker run --rm -d -p 27017:27017 mongo:7
+func TestMongoClient_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	config := NewMongoConfig("mongodb://localhost:27017", "admin")
+	client, err := NewMongoClient(config)
+	if err != nil {
+		t.Skipf("skipping integration test: %v", err)
+		return
+	}
+	defer client.Disconnect(context.Background())
+
+	t.Run("Ping", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := client.Ping(ctx); err != nil {
+			t.Errorf("failed to ping mongodb: %v", err)
+		}
+	})
+}
+`
+
+// oracleTemplate is the template for Oracle connection
+const oracleTemplate = `package database
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"os"
+	"time"
+
+	_ "github.com/godror/godror"
+)
+
+type OracleConfig struct {
+	DSN             string
+	MaxOpenConns    int
+	MaxIdleConns    int
+	ConnMaxLifetime time.Duration
+	ConnectTimeout  time.Duration
+}
+
+func NewOracleConfig(dsn string) OracleConfig {
+	return OracleConfig{
+		DSN:             dsn,
+		MaxOpenConns:    25,
+		MaxIdleConns:    5,
+		ConnMaxLifetime: 5 * time.Minute,
+		ConnectTimeout:  5 * time.Second,
+	}
+}
+
+func NewOracleConfigFromEnv() OracleConfig {
+	return NewOracleConfig(os.Getenv("DB_ORACLE_DSN"))
+}
+
+type OracleDB struct {
+	DB *sql.DB
+}
+
+func NewOracleDB(config OracleConfig) (*OracleDB, error) {
+	if config.DSN == "" {
+		return nil, fmt.Errorf("oracle DSN is required")
+	}
+
+	db, err := sql.Open("godror", config.DSN)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open oracle database: %w", err)
+	}
+
+	db.SetMaxOpenConns(config.MaxOpenConns)
+	db.SetMaxIdleConns(config.MaxIdleConns)
+	db.SetConnMaxLifetime(config.ConnMaxLifetime)
+
+	ctx, cancel := context.WithTimeout(context.Background(), config.ConnectTimeout)
+	defer cancel()
+	if err := db.PingContext(ctx); err != nil {
+		return nil, fmt.Errorf("failed to ping oracle database: %w", err)
+	}
+
+	return &OracleDB{DB: db}, nil
+}
+
+func (o *OracleDB) Close() error {
+	if o.DB != nil {
+		return o.DB.Close()
+	}
+	return nil
+}
+
+func (o *OracleDB) Ping(ctx context.Context) error {
+	return o.DB.PingContext(ctx)
+}
+
+func (o *OracleDB) Stats() sql.DBStats {
+	return o.DB.Stats()
+}
+`
+
+// oracleTestTemplate is the template for Oracle connection tests
+const oracleTestTemplate = `package database
+
+import (
+	"context"
+	"testing"
+	"time"
+)
+
+func TestNewOracleConfig(t *testing.T) {
+	dsn := "user/password@localhost:1521/ORCLCDB"
+	config := NewOracleConfig(dsn)
+
+	if config.DSN != dsn {
+		t.Errorf("expected DSN %s, got %s", dsn, config.DSN)
+	}
+	if config.MaxOpenConns != 25 {
+		t.Errorf("expected MaxOpenConns 25, got %d", config.MaxOpenConns)
+	}
+	if config.MaxIdleConns != 5 {
+		t.Errorf("expected MaxIdleConns 5, got %d", config.MaxIdleConns)
+	}
+	if config.ConnMaxLifetime != 5*time.Minute {
+		t.Errorf("expected ConnMaxLifetime 5m, got %v", config.ConnMaxLifetime)
+	}
+	if config.ConnectTimeout != 5*time.Second {
+		t.Errorf("expected ConnectTimeout 5s, got %v", config.ConnectTimeout)
+	}
+}
+
+func TestNewOracleConfigFromEnv(t *testing.T) {
+	expected := "env-user/env-pass@localhost:1521/ORCLCDB"
+	t.Setenv("DB_ORACLE_DSN", expected)
+
+	config := NewOracleConfigFromEnv()
+	if config.DSN != expected {
+		t.Errorf("expected DSN %s from env, got %s", expected, config.DSN)
+	}
+}
+
+func TestNewOracleDB_EmptyDSN(t *testing.T) {
+	config := OracleConfig{DSN: ""}
+	if _, err := NewOracleDB(config); err == nil {
+		t.Error("expected error with empty DSN, got nil")
+	}
+}
+
+func TestNewOracleDB_InvalidDSN(t *testing.T) {
+	config := NewOracleConfig("invalid-dsn")
+	if _, err := NewOracleDB(config); err == nil {
+		t.Error("expected error with invalid DSN, got nil")
+	}
+}
+
+// TestOracleDB_Integration requires a running Oracle instance
+// To run: configure a local Oracle XE/Free instance and ensure godror can connect
+func TestOracleDB_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	config := NewOracleConfig("user/password@localhost:1521/ORCLCDB")
+	db, err := NewOracleDB(config)
+	if err != nil {
+		t.Skipf("skipping integration test: %v", err)
+		return
+	}
+	defer db.Close()
+
+	t.Run("Ping", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := db.Ping(ctx); err != nil {
+			t.Errorf("failed to ping oracle database: %v", err)
+		}
+	})
+}
+`
+
 // envExampleTemplate is the template for .env.example file
 const envExampleTemplate = `# Application Configuration
 APP_ENV=dev
 APP_PORT=8080
 
-# Database Configuration
+{{- if eq .Database "postgres"}}
+# Database Configuration (PostgreSQL)
 DB_POSTGRES_URL=postgres://postgres:password@localhost:5432/mydb?sslmode=disable
-DB_MYSQL_DSN=user:password@tcp(localhost:3306)/mydb
+{{- end}}
+{{- if eq .Database "mysql"}}
+# Database Configuration (MySQL)
+DB_MYSQL_DSN=user:password@tcp(localhost:3306)/mydb?parseTime=true
+{{- end}}
+{{- if eq .Database "mongodb"}}
+# Database Configuration (MongoDB)
 DB_MONGO_URI=mongodb://localhost:27017
-DB_ORACLE_DSN=user/password@localhost:1521/ORCL
-
+DB_MONGO_DATABASE=mydb
+{{- end}}
+{{- if eq .Database "oracle"}}
+# Database Configuration (Oracle)
+DB_ORACLE_DSN=user/password@localhost:1521/ORCLCDB
+{{- end}}
+{{- if .UseRedis}}
 # Redis Configuration (optional)
 REDIS_ADDR=localhost:6379
-
+{{- end}}
+{{- if .UseKafka}}
 # Kafka Configuration (optional)
 KAFKA_BROKERS=localhost:9092
+{{- end}}
 `
 
 // makefileTemplate is the template for Makefile

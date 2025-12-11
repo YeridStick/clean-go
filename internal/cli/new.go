@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/YeridStick/cleango/internal/generator"
 	"github.com/manifoldco/promptui"
@@ -196,6 +197,10 @@ func runNew(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  cd %s\n", projectName)
 	fmt.Println("  go mod tidy")
 	fmt.Println("  go run ./cmd/api")
+	if envs := databaseEnvVars(config.Database); len(envs) > 0 {
+		fmt.Printf("\nConfiguración base de %s generada en infrastructure/adapters/database/%s.go\n", config.Database, config.Database)
+		fmt.Printf("Completa tus variables de conexión en .env (ejemplos en .env.example): %s\n", strings.Join(envs, ", "))
+	}
 	fmt.Println("\nPara agregar componentes:")
 	fmt.Println("  cleango add usecase <nombre>")
 	fmt.Println("  cleango add adapter <nombre>")
@@ -203,4 +208,19 @@ func runNew(cmd *cobra.Command, args []string) error {
 	fmt.Println("  cleango add handler <nombre>")
 
 	return nil
+}
+
+func databaseEnvVars(db string) []string {
+	switch db {
+	case "postgres":
+		return []string{"DB_POSTGRES_URL"}
+	case "mysql":
+		return []string{"DB_MYSQL_DSN"}
+	case "mongodb":
+		return []string{"DB_MONGO_URI", "DB_MONGO_DATABASE"}
+	case "oracle":
+		return []string{"DB_ORACLE_DSN"}
+	default:
+		return nil
+	}
 }

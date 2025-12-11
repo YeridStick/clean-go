@@ -7,6 +7,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var adapterWithTests bool
+
 var addCmd = &cobra.Command{
 	Use:   "add",
 	Short: "Agrega componentes al proyecto",
@@ -57,6 +59,7 @@ El adaptador seguirá el patrón Repository con:
   • Interface del repositorio
   • Implementación concreta
   • Métodos CRUD básicos
+  • Opción de generar un test base con --with-tests para personalizar tu conexión
 
 Ejemplo:
   cleango add adapter UserRepository
@@ -66,7 +69,7 @@ Ejemplo:
 		name := args[0]
 		fmt.Printf("🔧 Generando adaptador '%s'...\n", name)
 
-		if err := generator.GenerateAdapter(name); err != nil {
+		if err := generator.GenerateAdapter(name, adapterWithTests); err != nil {
 			return fmt.Errorf("error generando adaptador: %w", err)
 		}
 
@@ -136,4 +139,6 @@ func init() {
 	addCmd.AddCommand(addAdapterCmd)
 	addCmd.AddCommand(addModelCmd)
 	addCmd.AddCommand(addHandlerCmd)
+
+	addAdapterCmd.Flags().BoolVar(&adapterWithTests, "with-tests", false, "Genera también un test base para personalizar el adapter")
 }
